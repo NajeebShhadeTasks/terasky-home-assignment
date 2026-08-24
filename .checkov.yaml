@@ -33,3 +33,12 @@ skip-check:
   - CKV_AWS_136
   # VPC flow logs: cost trade-off for the demo, recommended in production.
   - CKV2_AWS_11
+  # The terraform CI role needs account-wide iam:Get*/List* (read-only) so
+  # terraform can refresh state; every WRITE action is scoped to the
+  # terasky-demo-* prefix. Read-only listing is an accepted exposure.
+  - CKV_AWS_356
+  - CKV_AWS_109
+  # Community modules are pinned by version constraint + .terraform.lock.hcl.
+  # Commit-hash source pinning is recommended for production supply-chain
+  # hardening (docs/tradeoffs.md) but hurts readability for this assignment.
+  - CKV_TF_1

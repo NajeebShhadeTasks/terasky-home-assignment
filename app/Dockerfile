@@ -12,8 +12,13 @@ RUN python -m venv /opt/venv \
 # --- runtime stage: minimal image, non-root, no build tools -------------------
 FROM python:3.12-slim
 
-# Dedicated unprivileged user (uid > 10000 to avoid host uid collisions).
-RUN groupadd --gid 10001 app \
+# Pull in Debian security updates published after the base image was cut
+# (keeps OS packages ahead of fixed CVEs), then create a dedicated
+# unprivileged user (uid > 10000 to avoid host uid collisions).
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 10001 app \
     && useradd --uid 10001 --gid app --shell /usr/sbin/nologin --create-home app
 
 COPY --from=builder /opt/venv /opt/venv

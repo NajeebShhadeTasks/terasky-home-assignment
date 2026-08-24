@@ -186,7 +186,9 @@ data "aws_iam_policy_document" "gha_terraform_iam_scoped" {
     actions = [
       "iam:CreateServiceLinkedRole",
     ]
-    resources = ["*"]
+    resources = [
+      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/*",
+    ]
   }
 }
 

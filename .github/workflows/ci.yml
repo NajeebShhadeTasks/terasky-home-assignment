@@ -119,12 +119,16 @@ jobs:
             | sudo sh -s -- -b /usr/local/bin v0.74.0
       - name: Trivy filesystem scan (vulns, misconfig, secrets)
         run: |
+          # skip-files gotk-components.yaml: generated upstream Flux component
+          # manifests (flux bootstrap); their RBAC breadth is inherent to Flux,
+          # not authored here. skip-dirs: intentionally-violating test fixtures.
           trivy fs . \
             --scanners vuln,misconfig,secret \
             --severity HIGH,CRITICAL \
             --exit-code 1 \
             --ignorefile .trivyignore \
-            --skip-dirs policies/tests/resources
+            --skip-dirs policies/tests/resources \
+            --skip-files clusters/demo/flux-system/gotk-components.yaml
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.1.0
         with:
           python-version: "3.12"

@@ -1,9 +1,11 @@
 # Accepted findings with justification. Reviewed 2026-08-24. Nothing here
 # silences an unmitigated exploitable issue in the demo scope.
 
-# EKS public API endpoint (0.0.0.0/0): deliberate, documented DEMO trade-off so
-# the assignment can be operated without a bastion/VPN. Production design uses
-# a private endpoint (docs/aws-production-design.md, docs/tradeoffs.md).
+# EKS public API endpoint: deliberate, documented DEMO trade-off so the
+# assignment can be operated without a bastion/VPN. Production design uses a
+# private endpoint (docs/aws-production-design.md, docs/tradeoffs.md).
+# 0040 = public access enabled, 0041 = public access CIDR 0.0.0.0/0.
+AVD-AWS-0040
 AVD-AWS-0041
 
 # Unrestricted node-group egress security group rule: terraform-aws-modules/eks
