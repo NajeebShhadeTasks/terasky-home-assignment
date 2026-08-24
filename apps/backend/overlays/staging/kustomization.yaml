@@ -9,7 +9,7 @@ resources:
 
 images:
 - name: 647604014014.dkr.ecr.eu-west-1.amazonaws.com/terasky-demo/backend
-  newTag: sha-760363c
+  newTag: sha-fde30ff
 
 configMapGenerator:
 - behavior: merge
