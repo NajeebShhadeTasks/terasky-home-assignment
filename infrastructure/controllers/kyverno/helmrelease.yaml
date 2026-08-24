@@ -9,6 +9,9 @@ metadata:
 spec:
   interval: 1h
   timeout: 10m
+  # Revert manual edits to the release's objects, not just chart-value drift.
+  driftDetection:
+    mode: enabled
   chart:
     spec:
       chart: kyverno
@@ -17,6 +20,17 @@ spec:
         kind: HelmRepository
         name: kyverno
   values:
+    # Limit the fail-closed admission webhook to the application namespaces.
+    # Policies already match only dev/staging/production, but without this the
+    # webhook still intercepts (and, when Kyverno is down, blocks) writes in
+    # every non-system namespace, including flux-system and external-secrets.
+    config:
+      webhooks:
+        namespaceSelector:
+          matchExpressions:
+            - key: kubernetes.io/metadata.name
+              operator: In
+              values: [dev, staging, production]
     admissionController:
       replicas: 1
       resources:

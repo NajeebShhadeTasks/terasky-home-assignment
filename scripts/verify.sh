@@ -49,9 +49,14 @@ for verb in get list; do
 done
 
 hdr "RBAC - negative (must all be denied)"
+# No arrays: empty-array expansion under `set -u` breaks stock macOS bash 3.2.
 while read -r verb res ns; do
-  if [ -n "$ns" ]; then extra=(-n "$ns"); else extra=(); fi
-  if [ "$(kubectl auth can-i "$verb" "$res" "${extra[@]}" --as=system:serviceaccount:dev:backend 2>/dev/null)" = "no" ]; then
+  if [ -n "$ns" ]; then
+    answer=$(kubectl auth can-i "$verb" "$res" -n "$ns" --as=system:serviceaccount:dev:backend 2>/dev/null)
+  else
+    answer=$(kubectl auth can-i "$verb" "$res" --as=system:serviceaccount:dev:backend 2>/dev/null)
+  fi
+  if [ "$answer" = "no" ]; then
     ok "denied: $verb $res ${ns:+(ns $ns)}"
   else
     bad "NOT denied: $verb $res ${ns:+(ns $ns)}"

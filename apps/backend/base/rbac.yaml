@@ -1,7 +1,8 @@
 # Nodes are cluster-scoped, so node read access REQUIRES a ClusterRole +
-# ClusterRoleBinding (a namespaced Role cannot grant it). Verbs are the exact
-# minimum for GET /nodes: get + list on nodes. No watch, no secrets, no
-# wildcard anything.
+# ClusterRoleBinding (a namespaced Role cannot grant it). The endpoint itself
+# only issues LIST; get is granted alongside it as the matching point-read of
+# the same resource (and per the assignment's stated verb set). No watch, no
+# secrets, no wildcard anything.
 #
 # Cluster-scoped names must be unique per environment; each overlay renames
 # this pair (e.g. terasky-backend-node-reader-dev) and repoints the binding.

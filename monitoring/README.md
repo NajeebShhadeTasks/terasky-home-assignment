@@ -4,7 +4,7 @@ Example alerting rules for the backend service. **Not deployed on the demo clust
 
 ## Contents
 
-- `alerts/backend-alerts.yaml`: one `PrometheusRule` with 6 alerts (5xx rate, crash loops, unavailable replicas, HPA at max, CPU near limit, node pressure). Syntactically valid kube-prometheus-stack rules; the first alert uses the app's own `http_requests_total` metric, the rest use kube-state-metrics and node-exporter series.
+- `alerts/backend-alerts.yaml`: one `PrometheusRule` with 6 alerts (5xx rate, crash loops, unavailable replicas, HPA at max, CPU near limit, node pressure). Syntactically valid kube-prometheus-stack rules; the first alert uses the app's own `http_requests_total` metric, the rest use kube-state-metrics and cAdvisor/kubelet series.
 
 ## How these would be deployed
 

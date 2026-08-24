@@ -8,7 +8,7 @@ Format per record: **Decision** / **Context** / **Why** / **Alternatives conside
 
 ## DD-1: FastAPI on Python for the backend
 
-**Decision.** Implement the backend as a Python FastAPI service (`app/`), served by uvicorn, with pinned dependencies (fastapi 0.115.6, uvicorn 0.34.0, kubernetes 31.0.0, prometheus-client 0.21.1).
+**Decision.** Implement the backend as a Python FastAPI service (`app/`), served by uvicorn, with the full dependency tree pinned in `app/requirements.txt` (fastapi 0.141.1, uvicorn 0.52.4, kubernetes 36.0.3, prometheus-client 0.26.0 at the time of writing; the file is the source of truth - it was regenerated during the starlette CVE remediation).
 
 **Context.** The assignment needs a small HTTP service with three endpoints: `/health`, `/nodes` (talks to the Kubernetes API), and `/metrics` (Prometheus format). The service itself is a vehicle for the platform work, not the point of the exercise.
 

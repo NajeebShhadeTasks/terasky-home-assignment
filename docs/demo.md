@@ -31,8 +31,8 @@ Expected: 2 nodes, `Ready`, version `v1.33.x`.
 
 ```text
 NAME                                        STATUS   ROLES    AGE   VERSION
-ip-10-0-x-x.eu-west-1.compute.internal      Ready    <none>   ..    v1.33.x
-ip-10-0-y-y.eu-west-1.compute.internal      Ready    <none>   ..    v1.33.x
+ip-10-60-x-x.eu-west-1.compute.internal      Ready    <none>   ..    v1.33.x
+ip-10-60-y-y.eu-west-1.compute.internal      Ready    <none>   ..    v1.33.x
 ```
 
 ```bash

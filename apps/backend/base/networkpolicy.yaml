@@ -29,6 +29,22 @@ spec:
       ports:
         - protocol: TCP
           port: 8000
+    # Enabling the ALB path (target-type ip) or Prometheus scraping requires
+    # additional allowances, because ALB ENIs are not pods and Prometheus runs
+    # in another namespace. Uncomment and adjust when those components exist:
+    # - from:
+    #     - ipBlock:
+    #         cidr: 10.60.0.0/16 # VPC CIDR: ALB ENI addresses
+    #   ports:
+    #     - protocol: TCP
+    #       port: 8000
+    # - from:
+    #     - namespaceSelector:
+    #         matchLabels:
+    #           kubernetes.io/metadata.name: monitoring
+    #   ports:
+    #     - protocol: TCP
+    #       port: 8000
   egress:
     - to: # DNS (CoreDNS in kube-system)
         - namespaceSelector: {}

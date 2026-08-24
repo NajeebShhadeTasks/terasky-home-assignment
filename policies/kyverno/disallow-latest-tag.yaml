@@ -22,6 +22,10 @@ spec:
         message: "An explicit image tag is required."
         pattern:
           spec:
+            =(initContainers):
+              - image: "*:*"
+            =(ephemeralContainers):
+              - image: "*:*"
             containers:
               - image: "*:*"
     - name: disallow-latest
@@ -34,5 +38,9 @@ spec:
         message: "Using the mutable `latest` tag is not allowed."
         pattern:
           spec:
+            =(initContainers):
+              - image: "!*:latest"
+            =(ephemeralContainers):
+              - image: "!*:latest"
             containers:
               - image: "!*:latest"

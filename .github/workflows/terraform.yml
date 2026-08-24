@@ -1,7 +1,10 @@
 name: Terraform
 
-# Plan on infra PRs (read-only credentials via OIDC), apply only through
-# workflow_dispatch gated by the `production` environment approval.
+# PR plans assume a READ-ONLY role (terasky-demo-gha-terraform-plan,
+# ReadOnlyAccess): pull_request jobs execute the workflow file from the PR
+# branch, so they must never hold write credentials. Apply assumes the
+# write-capable role, whose trust excludes pull_request entirely and whose
+# use here is gated by the `production` environment approval.
 
 on:
   pull_request:
@@ -21,54 +24,62 @@ permissions:
 
 env:
   AWS_REGION: eu-west-1
-  AWS_ROLE_ARN: arn:aws:iam::647604014014:role/terasky-demo-gha-terraform
   TF_IN_AUTOMATION: "true"
 
 jobs:
   plan:
-    name: terraform plan
-    if: github.event_name == 'pull_request' || inputs.action == 'plan'
-    # Fork PRs cannot mint OIDC tokens; skip rather than fail confusingly.
+    name: terraform plan (read-only)
+    # Fork PRs cannot mint OIDC tokens for this repo's roles; skip the job
+    # outright instead of failing at AssumeRole/init.
+    if: >-
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'workflow_dispatch' && inputs.action == 'plan')
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: infra/terraform
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.1
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         with:
           terraform_version: "1.5.7"
-      - name: Authenticate to AWS (OIDC)
-        if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name == 'workflow_dispatch'
+      - name: Authenticate to AWS (OIDC, read-only role)
         uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
         with:
-          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          role-to-assume: arn:aws:iam::647604014014:role/terasky-demo-gha-terraform-plan
           aws-region: ${{ env.AWS_REGION }}
       - name: Init + plan
         run: |
+          set -o pipefail
           terraform init -input=false
-          terraform plan -input=false -no-color | tail -50 >> "$GITHUB_STEP_SUMMARY" || {
-            echo "Plan failed"; exit 1; }
+          # -lock=false: the read-only role has no DynamoDB access, and a plan
+          # must never block a concurrent apply's lock anyway.
+          terraform plan -input=false -no-color -lock=false 2>&1 | tee plan-output.txt
+          tail -50 plan-output.txt >> "$GITHUB_STEP_SUMMARY"
 
   apply:
     name: terraform apply (approval required)
     if: github.event_name == 'workflow_dispatch' && inputs.action == 'apply'
     runs-on: ubuntu-latest
-    # Human approval gate before AWS-mutating credentials are issued.
+    # Human approval gate before write-capable AWS credentials are issued.
     environment: production
     defaults:
       run:
         working-directory: infra/terraform
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.1
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         with:
           terraform_version: "1.5.7"
       - name: Authenticate to AWS (OIDC)
         uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
         with:
-          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          role-to-assume: arn:aws:iam::647604014014:role/terasky-demo-gha-terraform
           aws-region: ${{ env.AWS_REGION }}
+      # Demo simplification: this re-plans and applies in one step. Production
+      # would upload the reviewed plan as an artifact from a plan job in the
+      # same run and `terraform apply <planfile>` exactly what was approved.
       - name: Init + apply
         run: |
           terraform init -input=false

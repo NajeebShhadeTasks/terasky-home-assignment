@@ -27,3 +27,6 @@ spec:
               - image: "647604014014.dkr.ecr.eu-west-1.amazonaws.com/*"
             =(initContainers):
               - image: "647604014014.dkr.ecr.eu-west-1.amazonaws.com/*"
+            # covers `kubectl debug` injected containers too
+            =(ephemeralContainers):
+              - image: "647604014014.dkr.ecr.eu-west-1.amazonaws.com/*"

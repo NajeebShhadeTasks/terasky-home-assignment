@@ -29,7 +29,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger("backend")
 
-app = FastAPI(title="terasky-backend", version="1.0.1", docs_url=None, redoc_url=None)
+# The whole schema surface is disabled, not just the UIs - nothing consumes it.
+app = FastAPI(
+    title="terasky-backend",
+    version="1.0.1",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
 
 HTTP_REQUESTS = Counter(
     "http_requests_total",
@@ -46,12 +53,20 @@ HTTP_LATENCY = Histogram(
 @app.middleware("http")
 async def prometheus_middleware(request: Request, call_next):
     start = time.perf_counter()
-    response = await call_next(request)
-    elapsed = time.perf_counter() - start
-    path = request.url.path
-    HTTP_REQUESTS.labels(request.method, path, str(response.status_code)).inc()
-    HTTP_LATENCY.labels(request.method, path).observe(elapsed)
-    return response
+    status = 500  # what the client sees if the handler raises
+    try:
+        response = await call_next(request)
+        status = response.status_code
+        return response
+    finally:
+        elapsed = time.perf_counter() - start
+        # Label with the matched route TEMPLATE, never the raw URL path:
+        # raw paths give every bot-scanned URL its own time series
+        # (unbounded label cardinality). Unmatched requests share one label.
+        route = request.scope.get("route")
+        path = getattr(route, "path", "unmatched")
+        HTTP_REQUESTS.labels(request.method, path, str(status)).inc()
+        HTTP_LATENCY.labels(request.method, path).observe(elapsed)
 
 
 @app.get("/health")

@@ -87,9 +87,11 @@ resource "aws_iam_role_policy" "gha_ecr" {
 }
 
 # ---------------------------------------------------------------------------
-# Role 2: Terraform plan/apply from CI. Necessarily broader, therefore trust
-# is restricted to PRs (plan), main (plan) and the protected `production`
-# GitHub environment (apply requires human approval there).
+# Role 2: Terraform APPLY. Necessarily broad (PowerUser + prefix-scoped IAM),
+# therefore its trust deliberately EXCLUDES pull_request: a PR can modify the
+# workflow file it runs under, so PR-triggered jobs must never be able to
+# assume write credentials. Apply runs only from main / the approval-gated
+# `production` environment. PR plans use the separate read-only role below.
 # ---------------------------------------------------------------------------
 data "aws_iam_policy_document" "gha_terraform_trust" {
   statement {
@@ -111,10 +113,8 @@ data "aws_iam_policy_document" "gha_terraform_trust" {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
       values = [
-        "repo:${local.github_repo_full}:pull_request",
         "repo:${local.github_repo_full}:ref:refs/heads/main",
         "repo:${local.github_repo_full}:environment:production",
-        "repo:${local.github_repo_immutable}:pull_request",
         "repo:${local.github_repo_immutable}:ref:refs/heads/main",
         "repo:${local.github_repo_immutable}:environment:production",
       ]
@@ -208,4 +208,51 @@ resource "aws_iam_role_policy" "gha_terraform_iam_scoped" {
   name   = "iam-project-scoped"
   role   = aws_iam_role.gha_terraform.id
   policy = data.aws_iam_policy_document.gha_terraform_iam_scoped.json
+}
+
+# ---------------------------------------------------------------------------
+# Role 3: Terraform PLAN on pull requests. ReadOnlyAccess only - even a PR
+# that rewrites the workflow (or a malicious provider executed by `plan`)
+# cannot mutate anything. Plans run with -lock=false so no DynamoDB write is
+# needed; state reads are covered by ReadOnlyAccess.
+# ---------------------------------------------------------------------------
+data "aws_iam_policy_document" "gha_terraform_plan_trust" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [data.aws_iam_openid_connect_provider.github.arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:sub"
+      values = [
+        "repo:${local.github_repo_full}:pull_request",
+        "repo:${local.github_repo_full}:ref:refs/heads/main",
+        "repo:${local.github_repo_immutable}:pull_request",
+        "repo:${local.github_repo_immutable}:ref:refs/heads/main",
+      ]
+    }
+  }
+}
+
+resource "aws_iam_role" "gha_terraform_plan" {
+  name                 = "${var.project_name}-gha-terraform-plan"
+  description          = "GitHub Actions (${local.github_repo_full}): read-only terraform plan on pull requests"
+  assume_role_policy   = data.aws_iam_policy_document.gha_terraform_plan_trust.json
+  max_session_duration = 3600
+}
+
+resource "aws_iam_role_policy_attachment" "gha_terraform_plan_readonly" {
+  role       = aws_iam_role.gha_terraform_plan.name
+  policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
 }

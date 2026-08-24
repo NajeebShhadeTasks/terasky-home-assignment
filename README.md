@@ -152,6 +152,7 @@ kubectl get pods -A -l app.kubernetes.io/name=terasky-backend -o wide
 
 # 3. Endpoints
 kubectl port-forward -n dev svc/backend 18080:80 &
+sleep 3   # give the tunnel a moment
 curl -s localhost:18080/health | python3 -m json.tool
 curl -s localhost:18080/nodes  | python3 -m json.tool   # currentNode matches -o wide above
 
@@ -188,8 +189,15 @@ Argued honestly in [docs/tradeoffs.md](docs/tradeoffs.md) (public EKS endpoint, 
 # 1. Destroy the infrastructure (ECR force_delete handles remaining images)
 terraform -chdir=infra/terraform destroy
 
-# 2. Remove the state backend (after destroy succeeds)
-aws s3 rb s3://terasky-demo-tfstate-647604014014 --force
+# 2. Remove the state backend (after destroy succeeds).
+#    The bucket is VERSIONED, so all object versions must be purged first
+#    (`aws s3 rb --force` alone fails with BucketNotEmpty):
+aws s3api list-object-versions --bucket terasky-demo-tfstate-647604014014 \
+  --query '{Objects: [Versions,DeleteMarkers][][].{Key:Key,VersionId:VersionId}}' \
+  --output json > /tmp/state-versions.json
+aws s3api delete-objects --bucket terasky-demo-tfstate-647604014014 \
+  --delete file:///tmp/state-versions.json
+aws s3 rb s3://terasky-demo-tfstate-647604014014
 aws dynamodb delete-table --table-name terasky-demo-tf-lock --region eu-west-1
 
 # 3. Optional: remove the Flux deploy key from the GitHub repo settings

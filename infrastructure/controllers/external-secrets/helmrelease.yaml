@@ -8,6 +8,8 @@ metadata:
   namespace: external-secrets
 spec:
   interval: 1h
+  driftDetection:
+    mode: enabled
   chart:
     spec:
       chart: external-secrets

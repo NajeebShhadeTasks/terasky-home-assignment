@@ -34,8 +34,13 @@ output "gha_ecr_role_arn" {
 }
 
 output "gha_terraform_role_arn" {
-  description = "IAM role assumed by GitHub Actions for terraform plan/apply"
+  description = "IAM role assumed by GitHub Actions for terraform apply (main/production only)"
   value       = aws_iam_role.gha_terraform.arn
+}
+
+output "gha_terraform_plan_role_arn" {
+  description = "Read-only IAM role assumed by GitHub Actions for terraform plan on PRs"
+  value       = aws_iam_role.gha_terraform_plan.arn
 }
 
 output "eso_role_arns" {

@@ -96,7 +96,7 @@ The guiding rule: nothing in the demo is architecturally incompatible with the p
 - Default 30-day recovery window (delete protection), CMK encryption per environment.
 - Native Secrets Manager rotation Lambdas for credentials that support it (database credentials especially); ESO propagates rotated values automatically.
 - Secrets live in the same account as the workload that consumes them (per-env accounts), so IAM scoping is structural, not string-matched.
-- Resource policies denying access from outside the owning account/roles, and CloudTail data events on secret reads for audit.
+- Resource policies denying access from outside the owning account/roles, and CloudTrail data events on secret reads for audit.
 
 ## 12. Environment and account separation
 

@@ -33,6 +33,19 @@ sleep 5
 echo "After reconcile:"
 kubectl get deployment backend -n dev -o jsonpath='{.spec.template.spec.containers[0].env[*].name}'; echo
 
+step "Secret rotation: new value in Secrets Manager, ESO resyncs within 1m (dev). No values are printed"
+BEFORE_RV=$(kubectl get secret backend-secrets -n dev -o jsonpath='{.metadata.resourceVersion}')
+NEWVAL=$(python3 -c "import secrets; print(secrets.token_urlsafe(24))")
+aws secretsmanager put-secret-value --secret-id terasky/dev/backend \
+  --secret-string "{\"apiKey\":\"${NEWVAL}\"}" --query 'Name' --output text
+echo "waiting for ESO refresh..."
+for i in 1 2 3 4 5 6; do
+  sleep 12
+  AFTER_RV=$(kubectl get secret backend-secrets -n dev -o jsonpath='{.metadata.resourceVersion}')
+  [ "$AFTER_RV" != "$BEFORE_RV" ] && break
+done
+echo "Kubernetes Secret resourceVersion: before=$BEFORE_RV after=$AFTER_RV (changed => synced)"
+
 step "Promotion history: the same immutable tag moved through the environments"
 git log --oneline -10 -- apps/backend/overlays
 grep -r newTag apps/backend/overlays/*/kustomization.yaml

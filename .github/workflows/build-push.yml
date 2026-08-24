@@ -16,6 +16,11 @@ on:
 permissions:
   contents: read
 
+# Serialize builds: two rapid merges must not race each other's deploy PRs.
+concurrency:
+  group: build-push-main
+  cancel-in-progress: false
+
 env:
   AWS_REGION: eu-west-1
   ECR_REPOSITORY: terasky-demo/backend
@@ -30,8 +35,8 @@ jobs:
       run:
         working-directory: app
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.1
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.1.0
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.12"
       - run: pip install -r requirements-dev.txt
@@ -47,7 +52,7 @@ jobs:
     outputs:
       image_tag: ${{ steps.meta.outputs.tag }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.1
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Compute immutable tag
         id: meta
         run: echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
@@ -58,15 +63,27 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
       - name: Login to ECR
         id: ecr
-        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.0.1
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
+      - name: Skip if this immutable tag was already pushed
+        id: exists
+        run: |
+          if aws ecr describe-images --repository-name "${ECR_REPOSITORY}" \
+               --image-ids imageTag="${{ steps.meta.outputs.tag }}" >/dev/null 2>&1; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "Tag ${{ steps.meta.outputs.tag }} already in ECR (immutable) - re-run is a no-op."
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Build image
+        if: steps.exists.outputs.already == 'false'
         run: |
           docker build \
             -t "${{ steps.ecr.outputs.registry }}/${ECR_REPOSITORY}:${{ steps.meta.outputs.tag }}" \
             app/
       - name: Scan image (Trivy - fail on HIGH/CRITICAL)
+        if: steps.exists.outputs.already == 'false'
         run: |
-          curl -sSL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+          curl -sSL https://raw.githubusercontent.com/aquasecurity/trivy/v0.74.0/contrib/install.sh \
             | sudo sh -s -- -b /usr/local/bin v0.74.0
           # --ignore-unfixed: OS-level CVEs with no shipped Debian fix are
           # tracked upstream, not actionable here; Python deps stay strict
@@ -78,6 +95,7 @@ jobs:
             --ignorefile .trivyignore \
             "${{ steps.ecr.outputs.registry }}/${ECR_REPOSITORY}:${{ steps.meta.outputs.tag }}"
       - name: Push image
+        if: steps.exists.outputs.already == 'false'
         run: docker push "${{ steps.ecr.outputs.registry }}/${ECR_REPOSITORY}:${{ steps.meta.outputs.tag }}"
 
   update-dev-desired-state:
@@ -88,7 +106,7 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.1
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Install kustomize (pinned)
         run: |
           curl -sSLo kustomize.tgz "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz"
@@ -104,14 +122,21 @@ jobs:
           TAG: ${{ needs.build-scan-push.outputs.image_tag }}
         run: |
           set -euo pipefail
+          if git diff --quiet apps/backend/overlays/dev/kustomization.yaml; then
+            echo "dev already points at ${TAG} - nothing to do."
+            exit 0
+          fi
           BRANCH="deploy/dev-${TAG}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "${BRANCH}"
           git add apps/backend/overlays/dev/kustomization.yaml
           git commit -m "deploy(dev): ${TAG}"
-          git push origin "${BRANCH}"
+          # --force: a stale branch from an unmerged/closed earlier run must
+          # not break the fresh run.
+          git push --force origin "${BRANCH}"
           gh pr create \
             --title "deploy(dev): ${TAG}" \
             --body "Automated desired-state update: dev now points at immutable image \`${TAG}\` (built from ${GITHUB_SHA}). Flux applies this after merge." \
-            --base main --head "${BRANCH}"
+            --base main --head "${BRANCH}" \
+            || echo "PR already exists for ${BRANCH}"

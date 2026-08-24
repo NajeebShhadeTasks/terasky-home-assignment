@@ -52,7 +52,7 @@ These are exactly the inputs for the two SLOs that matter for a stateless HTTP A
 - **Availability SLO** (for example 99.9% of requests non-5xx over 30 days): error ratio is `sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m]))`. Alert 1 below is the fast-burn version of this.
 - **Latency SLO** (for example 95% of requests under 300 ms): `histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))`. The histogram also gives an exact "fraction under threshold" via the bucket counters, which is the correct SLI form (quantiles are for dashboards, bucket ratios for SLO math).
 
-Everything else (restarts, replica availability, HPA state, node conditions) comes from kube-state-metrics and node-exporter, not the app, which is why the alert file needs the full stack.
+Everything else (restarts, replica availability, HPA state, node conditions) comes from kube-state-metrics and cAdvisor (via the kubelet), not the app, which is why the alert file needs the full stack.
 
 ## The 6 example alerts
 
@@ -65,7 +65,7 @@ Source: `monitoring/alerts/backend-alerts.yaml` (PrometheusRule, `release: kube-
 | `BackendReplicasUnavailable` | Deployment `backend` has unavailable replicas for 10m | warning | Rollout stuck, scheduling failure, or failing probes; capacity and PDB headroom eroding | `kubectl rollout status`, `kubectl get events`, look for image pull errors, unschedulable pods, or probe failures |
 | `BackendHpaAtMaxCapacity` | HPA current replicas >= maxReplicas for 15m | warning | No scaling headroom left; next load increase degrades latency instead of scaling | Confirm it is real load (request rate vs baseline), raise `maxReplicas` in the overlay via PR, or find the hot path |
 | `BackendHighCpu` | Pod CPU > 90% of its limit for 15m | warning | CFS throttling degrades latency before the HPA average target reacts | Check `http_request_duration_seconds` p95, review limits in the overlay, profile if load is unchanged |
-| `NodePressure` | Node reports Memory/Disk/PID pressure for 5m | critical | Kubelet may start evicting pods; a workload symptom is about to become a cluster symptom | `kubectl describe node`, identify the hog via node-exporter/`kubectl top`, cordon if needed; check node group sizing |
+| `NodePressure` | Node reports Memory/Disk/PID pressure for 5m | critical | Kubelet may start evicting pods; a workload symptom is about to become a cluster symptom | `kubectl describe node`, identify the hog via `kubectl top`/cAdvisor metrics, cordon if needed; check node group sizing |
 
 Routing: Alertmanager would send `severity: critical` to a paging channel and `severity: warning` to a ticket/Slack queue, grouped by namespace.
 

@@ -8,7 +8,6 @@ import logging
 from functools import lru_cache
 
 from kubernetes import client, config
-from kubernetes.client.rest import ApiException
 
 logger = logging.getLogger("backend.k8s")
 
@@ -50,6 +49,9 @@ def shape_node(node, current_node: str) -> dict:
 def list_nodes(current_node: str) -> list[dict]:
     try:
         result = _core_v1().list_node(_request_timeout=5)
-    except (ApiException, Exception) as exc:  # noqa: BLE001 - urllib3 raises many types
+    except Exception as exc:  # noqa: BLE001
+        # Deliberately broad: the endpoint's contract is "any failure to talk
+        # to the API -> 503 + logged detail". The client stack raises many
+        # types (ApiException, urllib3 errors, OSError, ConfigException).
         raise KubernetesUnavailableError(str(exc)) from exc
     return [shape_node(n, current_node) for n in result.items]

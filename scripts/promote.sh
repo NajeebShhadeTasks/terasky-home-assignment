@@ -30,6 +30,22 @@ if [ "${CURRENT}" != "${TAG}" ]; then
   exit 1
 fi
 
+TARGET_CURRENT=$(grep -A1 "name: ${IMAGE}" \
+  "${REPO_ROOT}/apps/backend/overlays/${TARGET}/kustomization.yaml" | grep newTag | awk '{print $2}')
+if [ "${TARGET_CURRENT}" = "${TAG}" ]; then
+  echo "${TARGET} already runs ${TAG} - nothing to promote."
+  exit 0
+fi
+
+# This local helper cannot enforce the GitHub `production` environment
+# approval; the canonical production path is the promote.yml workflow.
+if [ "${TARGET}" = "production" ] && [ "${PROMOTE_CONFIRM_PRODUCTION:-}" != "yes" ]; then
+  echo "REFUSED: production promotions go through the promote.yml workflow"
+  echo "(approval-gated). To intentionally bypass from this machine, re-run"
+  echo "with PROMOTE_CONFIRM_PRODUCTION=yes."
+  exit 1
+fi
+
 BRANCH="promote/${TARGET}-${TAG}"
 git -C "${REPO_ROOT}" checkout -b "${BRANCH}"
 (cd "${REPO_ROOT}/apps/backend/overlays/${TARGET}" && kustomize edit set image "${IMAGE}:${TAG}")

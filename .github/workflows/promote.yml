@@ -39,7 +39,7 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.1
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Install kustomize (pinned)
         run: |
           curl -sSLo kustomize.tgz "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz"
@@ -77,14 +77,20 @@ jobs:
           TARGET: ${{ inputs.target_environment }}
         run: |
           set -euo pipefail
+          if git diff --quiet "apps/backend/overlays/${TARGET}/kustomization.yaml"; then
+            echo "${TARGET} already runs ${TAG} - nothing to promote." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           BRANCH="promote/${TARGET}-${TAG}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "${BRANCH}"
           git add "apps/backend/overlays/${TARGET}/kustomization.yaml"
           git commit -m "promote(${TARGET}): ${TAG}"
-          git push origin "${BRANCH}"
+          # --force: tolerate a stale branch from an earlier closed run.
+          git push --force origin "${BRANCH}"
           gh pr create \
             --title "promote(${TARGET}): ${TAG}" \
             --body "Promotes the SAME immutable image \`${TAG}\` into **${TARGET}** (no rebuild). Flux applies this after merge. Rollback = revert this commit." \
-            --base main --head "${BRANCH}"
+            --base main --head "${BRANCH}" \
+            || echo "PR already exists for ${BRANCH}"
