@@ -202,3 +202,48 @@ A second image (`app` version 1.0.1) was built by CI, deployed to dev through
 the automated PR, verified, and then rolled back with `git revert` of the
 deploy commit; Flux reconciled dev back to the previous image. Evidence in the
 git history (`git log -- apps/backend/overlays/dev`).
+
+
+## Adversarial review round (2026-08-24, pre-submission)
+
+A six-area adversarial review (application, manifests, Terraform/AWS, CI/CD,
+GitOps/policy/secrets, docs-vs-reality) produced 35 findings
+(10 major / 16 minor / 9 nit). All majors and nearly all minors were fixed and
+re-verified; the notable ones:
+
+- Prometheus middleware labeled metrics with the RAW request path (unbounded
+  cardinality under bot scans) -> now labels with the matched route template,
+  folds unmatched requests into one `unmatched` series, and records handler
+  exceptions as 500s. Regression tests added (10 tests total).
+- PR-time `terraform plan` ran with the WRITE-capable role while its trust
+  allowed `pull_request` (a PR can edit the workflow it runs under) -> new
+  dedicated `terasky-demo-gha-terraform-plan` role with ReadOnlyAccess for PR
+  plans (`-lock=false`); `pull_request` removed from the write role's trust.
+  Exercised live: plan dispatch run succeeded with the read-only role.
+- Kyverno's fail-closed webhook intercepted every non-system namespace,
+  contradicting the "cannot brick the platform" claim -> webhook now scoped
+  via `config.webhooks.namespaceSelector` to dev/staging/production
+  (verified on the live ValidatingWebhookConfiguration; enforcement re-tested).
+- promote/build-push re-runs were not idempotent (immutable-tag push failure,
+  empty-commit failure, stale branches) -> ECR tag pre-check, no-op guards,
+  forced branch pushes, build concurrency group.
+- `verify.sh` mis-reported RBAC denials as failures under stock macOS
+  bash 3.2 (empty-array expansion with `set -u`) -> rewritten without arrays;
+  re-run under /bin/bash 3.2: PASS=23 FAIL=0.
+- Image policies ignored init/ephemeral containers (`kubectl debug` bypass) ->
+  patterns extended; policy tests still 16/16.
+- Doc corrections: stale dependency versions in DD-1, ALB/NetworkPolicy
+  claim accuracy, cAdvisor vs node-exporter attribution, versioned-bucket
+  cleanup procedure, action pin version comments, node-IP examples, typo.
+
+Accepted (documented, not fixed): GITHUB_TOKEN-created PRs do not trigger CI
+(GitHub App token is the production fix); admin-bypass merges for the solo
+maintainer; self-approval of the production environment; demo bootstrap starts
+on a placeholder tag until the first image lands.
+
+Final state after remediation: all three environments promoted to
+`sha-fde30ff` through the full chain (deploy PR #5, staging PR #6, production
+PR #7 with environment approval), rollouts green, `verify.sh` 23/23 under both
+bash 5 and stock bash 3.2, `terraform plan` workflow exercised via
+workflow_dispatch using the read-only role (run succeeded), Terraform reports
+zero pending changes.
