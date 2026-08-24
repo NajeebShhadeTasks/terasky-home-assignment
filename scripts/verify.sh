@@ -20,7 +20,8 @@ kubectl get clusterrolebinding terasky-backend-node-reader-dev >/dev/null && ok 
 hdr "Flux"
 flux get kustomizations -A
 flux get helmreleases -A
-if flux get kustomizations -A --status-selector ready=false 2>/dev/null | grep -q .; then
+# tail -n +2 skips the header row flux prints even for an empty result
+if flux get kustomizations -A --status-selector ready=false 2>/dev/null | tail -n +2 | grep -q .; then
   bad "some Flux kustomizations not ready"
 else
   ok "all Flux kustomizations ready"

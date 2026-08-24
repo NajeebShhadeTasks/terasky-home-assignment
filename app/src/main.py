@@ -29,7 +29,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("backend")
 
-app = FastAPI(title="terasky-backend", version="1.0.0", docs_url=None, redoc_url=None)
+app = FastAPI(title="terasky-backend", version="1.0.1", docs_url=None, redoc_url=None)
 
 HTTP_REQUESTS = Counter(
     "http_requests_total",
