@@ -4,87 +4,87 @@ kind: Kustomization
 namespace: production
 
 resources:
-  - namespace.yaml
-  - ../../base
+- namespace.yaml
+- ../../base
 
 images:
-  - name: 647604014014.dkr.ecr.eu-west-1.amazonaws.com/terasky-demo/backend
-    newTag: sha-0000000 # promoted from staging via an approved promotion PR
+- name: 647604014014.dkr.ecr.eu-west-1.amazonaws.com/terasky-demo/backend
+  newTag: sha-760363c
 
 configMapGenerator:
-  - name: backend-config
-    behavior: merge
-    literals:
-      - APP_ENV=production
-      - LOG_LEVEL=WARNING
+- behavior: merge
+  literals:
+  - APP_ENV=production
+  - LOG_LEVEL=WARNING
+  name: backend-config
 
-patches:
-  - target:
-      kind: ClusterRole
-      name: terasky-backend-node-reader
-    patch: |-
-      - op: replace
-        path: /metadata/name
-        value: terasky-backend-node-reader-production
-  - target:
-      kind: ClusterRoleBinding
-      name: terasky-backend-node-reader
-    patch: |-
-      - op: replace
-        path: /metadata/name
-        value: terasky-backend-node-reader-production
-      - op: replace
-        path: /roleRef/name
-        value: terasky-backend-node-reader-production
   # Production sizing: larger floor, more headroom, stricter disruption budget.
-  - target:
-      kind: HorizontalPodAutoscaler
-      name: backend
-    patch: |-
-      - op: replace
-        path: /spec/minReplicas
-        value: 3
-      - op: replace
-        path: /spec/maxReplicas
-        value: 6
-  - target:
-      kind: PodDisruptionBudget
-      name: backend
-    patch: |-
-      - op: replace
-        path: /spec/minAvailable
-        value: 2
-  - target:
-      kind: Deployment
-      name: backend
-    patch: |-
-      - op: replace
-        path: /spec/template/spec/containers/0/resources
-        value:
-          requests:
-            cpu: 100m
-            memory: 128Mi
-          limits:
-            cpu: 500m
-            memory: 256Mi
-  - target:
-      kind: Ingress
-      name: backend
-    patch: |-
-      - op: replace
-        path: /spec/rules/0/host
-        value: backend.terasky-demo.example.com
-  - target:
-      kind: ExternalSecret
-      name: backend
-    patch: |-
-      - op: replace
-        path: /spec/data/0/remoteRef/key
-        value: terasky/production/backend
-  - target:
-      kind: ServiceAccount
-      name: eso-backend
-    patch: |-
-      - op: replace
-        path: /metadata/annotations/eks.amazonaws.com~1role-arn
-        value: arn:aws:iam::647604014014:role/terasky-demo-eso-production
+patches:
+- patch: |-
+    - op: replace
+      path: /metadata/name
+      value: terasky-backend-node-reader-production
+  target:
+    kind: ClusterRole
+    name: terasky-backend-node-reader
+- patch: |-
+    - op: replace
+      path: /metadata/name
+      value: terasky-backend-node-reader-production
+    - op: replace
+      path: /roleRef/name
+      value: terasky-backend-node-reader-production
+  target:
+    kind: ClusterRoleBinding
+    name: terasky-backend-node-reader
+- patch: |-
+    - op: replace
+      path: /spec/minReplicas
+      value: 3
+    - op: replace
+      path: /spec/maxReplicas
+      value: 6
+  target:
+    kind: HorizontalPodAutoscaler
+    name: backend
+- patch: |-
+    - op: replace
+      path: /spec/minAvailable
+      value: 2
+  target:
+    kind: PodDisruptionBudget
+    name: backend
+- patch: |-
+    - op: replace
+      path: /spec/template/spec/containers/0/resources
+      value:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 256Mi
+  target:
+    kind: Deployment
+    name: backend
+- patch: |-
+    - op: replace
+      path: /spec/rules/0/host
+      value: backend.terasky-demo.example.com
+  target:
+    kind: Ingress
+    name: backend
+- patch: |-
+    - op: replace
+      path: /spec/data/0/remoteRef/key
+      value: terasky/production/backend
+  target:
+    kind: ExternalSecret
+    name: backend
+- patch: |-
+    - op: replace
+      path: /metadata/annotations/eks.amazonaws.com~1role-arn
+      value: arn:aws:iam::647604014014:role/terasky-demo-eso-production
+  target:
+    kind: ServiceAccount
+    name: eso-backend
