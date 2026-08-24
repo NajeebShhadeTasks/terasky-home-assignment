@@ -1,0 +1,32 @@
+# Nodes are cluster-scoped, so node read access REQUIRES a ClusterRole +
+# ClusterRoleBinding (a namespaced Role cannot grant it). Verbs are the exact
+# minimum for GET /nodes: get + list on nodes. No watch, no secrets, no
+# wildcard anything.
+#
+# Cluster-scoped names must be unique per environment; each overlay renames
+# this pair (e.g. terasky-backend-node-reader-dev) and repoints the binding.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: terasky-backend-node-reader
+  labels:
+    app.kubernetes.io/name: terasky-backend
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: terasky-backend-node-reader
+  labels:
+    app.kubernetes.io/name: terasky-backend
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: terasky-backend-node-reader
+subjects:
+  - kind: ServiceAccount
+    name: backend
+    namespace: default # replaced by the overlay namespace transformer

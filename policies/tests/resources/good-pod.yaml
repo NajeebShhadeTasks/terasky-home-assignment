@@ -1,0 +1,35 @@
+# Fully compliant pod: mirrors what the backend Deployment produces.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: good-backend
+  namespace: dev
+  labels:
+    app.kubernetes.io/name: terasky-backend
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: backend
+      image: 647604014014.dkr.ecr.eu-west-1.amazonaws.com/terasky-demo/backend:sha-a1b2c3d
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 200m
+          memory: 128Mi
+      livenessProbe:
+        httpGet: { path: /health, port: 8000 }
+        periodSeconds: 10
+      readinessProbe:
+        httpGet: { path: /health, port: 8000 }
+        periodSeconds: 5

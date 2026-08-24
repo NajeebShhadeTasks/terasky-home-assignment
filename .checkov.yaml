@@ -1,0 +1,32 @@
+# Checkov configuration - Terraform scanning.
+#
+# Every skip below is a DELIBERATE, documented demo trade-off, not a silenced
+# finding. The production design (docs/aws-production-design.md) addresses all
+# of them.
+directory:
+  - infra/terraform
+framework:
+  - terraform
+compact: true
+quiet: true
+download-external-modules: false
+skip-check:
+  # Demo trade-off: public EKS API endpoint so the assignment can be driven
+  # from a laptop. Production: private endpoint + bastion/VPN.
+  - CKV_AWS_38  # EKS public endpoint access
+  - CKV_AWS_39  # EKS public endpoint enabled
+  # Demo trade-off: only api/audit/authenticator control-plane logs are kept
+  # (scheduler/controllerManager add cost, little demo value).
+  - CKV_AWS_37  # EKS control plane logging for ALL log types
+  # Demo trade-off: default EBS volumes of the managed node group; production
+  # would use a custom launch template with encrypted gp3.
+  - CKV_AWS_341
+  # Secrets Manager CMK: demo uses the AWS-managed key; production would use a
+  # customer-managed KMS key with rotation.
+  - CKV_AWS_149
+  - CKV2_AWS_57 # automatic rotation configured out-of-band (see docs/secrets.md)
+  # ECR: AES256 (SSE-S3 style) encryption is acceptable for demo images;
+  # production recommendation is a CMK.
+  - CKV_AWS_136
+  # VPC flow logs: cost trade-off for the demo, recommended in production.
+  - CKV2_AWS_11

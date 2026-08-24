@@ -1,0 +1,37 @@
+# Policy 1: containers must not run as root.
+# Scope: only the application namespaces - system controllers (kube-system,
+# flux-system, kyverno, external-secrets) are intentionally out of scope so a
+# policy rollout can never brick the platform.
+# Mode: Enforce - these namespaces are fully owned by this project and every
+# manifest in Git complies, so rejecting violations outright is safe.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-run-as-non-root
+  annotations:
+    policies.kyverno.io/description: >-
+      Containers must set runAsNonRoot=true at the pod level or on every
+      container.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: run-as-non-root
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [dev, staging, production]
+      validate:
+        message: "Containers must run as non-root: set runAsNonRoot=true."
+        anyPattern:
+          - spec:
+              securityContext:
+                runAsNonRoot: true
+              containers:
+                - =(securityContext):
+                    =(runAsNonRoot): true
+          - spec:
+              containers:
+                - securityContext:
+                    runAsNonRoot: true

@@ -1,0 +1,16 @@
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S"]
+ignore = [
+  "S104", # binding 0.0.0.0 is intentional inside a container
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S106"] # asserts and dummy values are fine in tests

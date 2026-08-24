@@ -1,0 +1,38 @@
+# External Secrets Operator: syncs AWS Secrets Manager -> Kubernetes Secrets.
+# Authentication design: per-namespace SecretStores using IRSA (see
+# apps/backend/base/externalsecret.yaml and docs/secrets.md).
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: external-secrets
+  namespace: external-secrets
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: external-secrets
+      version: 2.9.0
+      sourceRef:
+        kind: HelmRepository
+        name: external-secrets
+  values:
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        memory: 256Mi
+    webhook:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          memory: 128Mi
+    certController:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          memory: 128Mi

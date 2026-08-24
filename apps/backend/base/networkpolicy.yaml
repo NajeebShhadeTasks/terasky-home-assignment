@@ -1,0 +1,48 @@
+# Enforced by the VPC CNI network-policy agent (enableNetworkPolicy=true is
+# set on the EKS addon by Terraform - without that, EKS silently ignores
+# NetworkPolicy objects).
+#
+# Ingress: only same-namespace pods may reach the app port. Kubelet probes are
+# exempt from NetworkPolicy by design, and `kubectl port-forward` tunnels via
+# the kubelet, so the demo path keeps working.
+#
+# Egress trade-off (documented, deliberate): DNS + TCP/443 only. 443 stays
+# open to any address because the EKS API endpoint and AWS APIs have no stable
+# CIDR that is portable across clusters. This still blocks lateral movement on
+# every other port. See docs/tradeoffs.md.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend
+  labels:
+    app.kubernetes.io/name: terasky-backend
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: terasky-backend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector: {} # any pod in this namespace
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    - to: # DNS (CoreDNS in kube-system)
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to: # Kubernetes API + AWS APIs (HTTPS)
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443

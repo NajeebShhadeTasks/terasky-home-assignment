@@ -1,0 +1,30 @@
+# Production ingress design: Route53 -> ACM TLS -> ALB (AWS Load Balancer
+# Controller) -> Service -> Pods. The controller is NOT installed in the demo
+# cluster (no domain available), so this manifest applies cleanly but receives
+# no address; the live demo uses `kubectl port-forward` instead.
+# See docs/architecture.md#ingress for the full trade-off.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: backend
+  labels:
+    app.kubernetes.io/name: terasky-backend
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    # certificate-arn intentionally omitted: discovered from ACM by hostname.
+spec:
+  ingressClassName: alb
+  rules:
+    - host: backend.example.com # patched per environment
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  name: http

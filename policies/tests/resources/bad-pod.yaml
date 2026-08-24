@@ -1,0 +1,16 @@
+# Deliberately non-compliant pod: violates every policy at once.
+# (Root user, escalation allowed, no resources, no probes, latest tag from a
+# public registry.)
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-backend
+  namespace: dev
+  labels:
+    app.kubernetes.io/name: terasky-backend
+spec:
+  containers:
+    - name: backend
+      image: docker.io/library/nginx:latest
+      securityContext:
+        privileged: true

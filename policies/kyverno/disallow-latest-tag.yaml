@@ -1,0 +1,38 @@
+# Policy 5: mutable image tags are forbidden. Deployments must reference an
+# explicit tag (this project uses immutable sha-<git sha> tags), otherwise
+# "what is running" cannot be answered from Git and rollback is meaningless.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-latest-tag
+  annotations:
+    policies.kyverno.io/description: >-
+      Images must specify an explicit tag, and that tag must not be `latest`.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-image-tag
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [dev, staging, production]
+      validate:
+        message: "An explicit image tag is required."
+        pattern:
+          spec:
+            containers:
+              - image: "*:*"
+    - name: disallow-latest
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [dev, staging, production]
+      validate:
+        message: "Using the mutable `latest` tag is not allowed."
+        pattern:
+          spec:
+            containers:
+              - image: "!*:latest"

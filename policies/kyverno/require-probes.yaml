@@ -1,0 +1,29 @@
+# Policy 4: application workloads must define liveness and readiness probes.
+# Without them Kubernetes cannot distinguish "started" from "able to serve",
+# breaking rolling updates and self-healing.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-probes
+  annotations:
+    policies.kyverno.io/description: >-
+      Liveness and readiness probes are mandatory for application pods.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-liveness-readiness
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [dev, staging, production]
+      validate:
+        message: "livenessProbe and readinessProbe are required on every container."
+        pattern:
+          spec:
+            containers:
+              - livenessProbe:
+                  periodSeconds: "?*"
+                readinessProbe:
+                  periodSeconds: "?*"

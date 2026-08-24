@@ -1,0 +1,29 @@
+# Policy 6: application images may come only from this project's ECR
+# registry. Blocks typo-squatted/unvetted public images in app namespaces.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-image-registries
+  annotations:
+    policies.kyverno.io/description: >-
+      Application namespaces may only run images from the project ECR
+      registry.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: ecr-only
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [dev, staging, production]
+      validate:
+        message: >-
+          Images must come from 647604014014.dkr.ecr.eu-west-1.amazonaws.com.
+        pattern:
+          spec:
+            containers:
+              - image: "647604014014.dkr.ecr.eu-west-1.amazonaws.com/*"
+            =(initContainers):
+              - image: "647604014014.dkr.ecr.eu-west-1.amazonaws.com/*"

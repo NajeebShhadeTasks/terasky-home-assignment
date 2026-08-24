@@ -1,0 +1,32 @@
+# Policy 3: every container must declare CPU/memory requests AND limits.
+# Prevents noisy-neighbour starvation and unbounded memory usage on shared
+# nodes.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-resources
+  annotations:
+    policies.kyverno.io/description: >-
+      CPU and memory requests and limits are mandatory for all containers.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-requests-and-limits
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaces: [dev, staging, production]
+      validate:
+        message: "CPU/memory requests and limits are required on every container."
+        pattern:
+          spec:
+            containers:
+              - resources:
+                  requests:
+                    cpu: "?*"
+                    memory: "?*"
+                  limits:
+                    cpu: "?*"
+                    memory: "?*"

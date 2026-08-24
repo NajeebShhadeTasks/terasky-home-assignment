@@ -1,0 +1,13 @@
+# Copy to terraform.tfvars and adjust. Defaults in variables.tf already match
+# the demo environment, so an empty tfvars is also valid.
+
+project_name      = "terasky-demo"
+region            = "eu-west-1"
+cluster_version   = "1.33"
+github_owner      = "NajeebShhadeTasks"
+github_repository = "terasky-home-assignment"
+
+node_instance_types     = ["t3.large"]
+node_group_min_size     = 2
+node_group_max_size     = 3
+node_group_desired_size = 2

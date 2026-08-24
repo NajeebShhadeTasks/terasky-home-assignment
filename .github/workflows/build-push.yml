@@ -1,0 +1,112 @@
+name: Build and Push
+
+# Builds an immutable image (sha-<git sha>) on every merge to main that touches
+# the application, then opens a PR that points the DEV overlay at the new tag.
+#
+# This workflow NEVER talks to the Kubernetes cluster. Deployment happens only
+# through Git: Flux notices the merged desired-state change and reconciles it.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: eu-west-1
+  ECR_REPOSITORY: terasky-demo/backend
+  AWS_ROLE_ARN: arn:aws:iam::647604014014:role/terasky-demo-gha-ecr
+  KUSTOMIZE_VERSION: "5.7.1"
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.1
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.1.0
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - run: pytest -q
+
+  build-scan-push:
+    name: Build, scan, push image
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # OIDC federation to AWS - no stored AWS keys
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.1
+      - name: Compute immutable tag
+        id: meta
+        run: echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - name: Authenticate to AWS (OIDC)
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.0.1
+      - name: Build image
+        run: |
+          docker build \
+            -t "${{ steps.ecr.outputs.registry }}/${ECR_REPOSITORY}:${{ steps.meta.outputs.tag }}" \
+            app/
+      - name: Scan image (Trivy - fail on HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
+        with:
+          scan-type: image
+          image-ref: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.tag }}
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          trivyignores: .trivyignore
+      - name: Push image
+        run: docker push "${{ steps.ecr.outputs.registry }}/${ECR_REPOSITORY}:${{ steps.meta.outputs.tag }}"
+
+  update-dev-desired-state:
+    name: PR - deploy to dev
+    needs: build-scan-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.1
+      - name: Install kustomize (pinned)
+        run: |
+          curl -sSLo kustomize.tgz "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz"
+          tar -xzf kustomize.tgz kustomize && sudo mv kustomize /usr/local/bin/
+      - name: Update dev overlay image tag
+        run: |
+          cd apps/backend/overlays/dev
+          kustomize edit set image \
+            "647604014014.dkr.ecr.eu-west-1.amazonaws.com/terasky-demo/backend:${{ needs.build-scan-push.outputs.image_tag }}"
+      - name: Open pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build-scan-push.outputs.image_tag }}
+        run: |
+          set -euo pipefail
+          BRANCH="deploy/dev-${TAG}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "${BRANCH}"
+          git add apps/backend/overlays/dev/kustomization.yaml
+          git commit -m "deploy(dev): ${TAG}"
+          git push origin "${BRANCH}"
+          gh pr create \
+            --title "deploy(dev): ${TAG}" \
+            --body "Automated desired-state update: dev now points at immutable image \`${TAG}\` (built from ${GITHUB_SHA}). Flux applies this after merge." \
+            --base main --head "${BRANCH}"

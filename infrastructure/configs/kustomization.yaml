@@ -1,0 +1,6 @@
+# Cluster-wide configuration applied after controllers are ready.
+# Currently: Kyverno ClusterPolicies (the CRDs must exist first).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../policies/kyverno

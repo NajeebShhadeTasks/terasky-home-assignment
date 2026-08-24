@@ -1,0 +1,97 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: dev
+
+resources:
+  - namespace.yaml
+  - ../../base
+
+images:
+  - name: 647604014014.dkr.ecr.eu-west-1.amazonaws.com/terasky-demo/backend
+    newTag: sha-0000000 # updated automatically by CI after each image build
+
+configMapGenerator:
+  - name: backend-config
+    behavior: merge
+    literals:
+      - APP_ENV=dev
+      - LOG_LEVEL=DEBUG
+
+patches:
+  # Cluster-scoped resources need environment-unique names.
+  - target:
+      kind: ClusterRole
+      name: terasky-backend-node-reader
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: terasky-backend-node-reader-dev
+  - target:
+      kind: ClusterRoleBinding
+      name: terasky-backend-node-reader
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: terasky-backend-node-reader-dev
+      - op: replace
+        path: /roleRef/name
+        value: terasky-backend-node-reader-dev
+  # Dev sizing: small, single replica allowed, disruptions always allowed.
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: backend
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 3
+  - target:
+      kind: PodDisruptionBudget
+      name: backend
+    patch: |-
+      - op: remove
+        path: /spec/minAvailable
+      - op: add
+        path: /spec/maxUnavailable
+        value: 1
+  - target:
+      kind: Deployment
+      name: backend
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+  - target:
+      kind: Ingress
+      name: backend
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: backend.dev.terasky-demo.example.com
+  # Environment-specific secret path + faster refresh for the rotation demo.
+  - target:
+      kind: ExternalSecret
+      name: backend
+    patch: |-
+      - op: replace
+        path: /spec/data/0/remoteRef/key
+        value: terasky/dev/backend
+      - op: replace
+        path: /spec/refreshInterval
+        value: 1m
+  - target:
+      kind: ServiceAccount
+      name: eso-backend
+    patch: |-
+      - op: replace
+        path: /metadata/annotations/eks.amazonaws.com~1role-arn
+        value: arn:aws:iam::647604014014:role/terasky-demo-eso-dev

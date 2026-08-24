@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - serviceaccount.yaml
+  - rbac.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+  - hpa.yaml
+  - pdb.yaml
+  - networkpolicy.yaml
+  - externalsecret.yaml
+
+# Generated with a content hash suffix: changing configuration automatically
+# triggers a rolling restart of the Deployment.
+configMapGenerator:
+  - name: backend-config
+    literals:
+      - APP_ENV=base
+      - LOG_LEVEL=INFO
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: terasky-home-assignment
+      app.kubernetes.io/managed-by: flux

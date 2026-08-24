@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Verification only - nothing in this workflow may write anywhere.
+permissions:
+  contents: read
+
+env:
+  KUSTOMIZE_VERSION: "5.7.1"
+  KUBECONFORM_VERSION: "0.8.0"
+  KYVERNO_CLI_VERSION: "1.19.0"
+
+jobs:
+  app:
+    name: Python lint + tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.1
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.1.0
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Format check (ruff)
+        run: ruff format --check .
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Unit tests (pytest)
+        run: pytest -q
+
+  docker:
+    name: Docker build validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.1
+      - name: Build image (no push)
+        run: docker build -t terasky-backend:ci app/
+
+  terraform:
+    name: Terraform fmt + validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.1
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "1.5.7"
+      - name: Format check
+        run: terraform fmt -check -recursive
+      - name: Validate
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+  kubernetes:
+    name: Kustomize build + kubeconform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.1
+      - name: Install kustomize + kubeconform (pinned)
+        run: |
+          curl -sSLo kustomize.tgz "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz"
+          tar -xzf kustomize.tgz kustomize && sudo mv kustomize /usr/local/bin/
+          curl -sSLo kubeconform.tgz "https://github.com/yannh/kubeconform/releases/download/v${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          tar -xzf kubeconform.tgz kubeconform && sudo mv kubeconform /usr/local/bin/
+      - name: Build and validate every overlay + platform layer
+        run: |
+          set -euo pipefail
+          SCHEMA_OPTS=(-strict -summary
+            -schema-location default
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json')
+          for dir in \
+            apps/backend/overlays/dev \
+            apps/backend/overlays/staging \
+            apps/backend/overlays/production \
+            infrastructure/controllers \
+            infrastructure/configs \
+            clusters/demo; do
+            echo "=== ${dir} ==="
+            kustomize build "${dir}" | kubeconform "${SCHEMA_OPTS[@]}"
+          done
+
+  policies:
+    name: Kyverno policy tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.1
+      - name: Install kyverno CLI (pinned)
+        run: |
+          curl -sSLo kyverno.tgz "https://github.com/kyverno/kyverno/releases/download/v${KYVERNO_CLI_VERSION}/kyverno-cli_v${KYVERNO_CLI_VERSION}_linux_x86_64.tar.gz"
+          tar -xzf kyverno.tgz kyverno && sudo mv kyverno /usr/local/bin/
+      - name: Policy unit tests (good/bad fixtures)
+        run: kyverno test policies/tests
+
+  security:
+    name: Trivy + Checkov scans
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.1
+      - name: Trivy filesystem scan (vulns, misconfig, secrets)
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,misconfig,secret
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          trivyignores: .trivyignore
+          skip-dirs: policies/tests/resources
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.1.0
+        with:
+          python-version: "3.12"
+      - name: Checkov (Terraform)
+        run: |
+          pip install checkov==3.2.334
+          checkov --config-file .checkov.yaml

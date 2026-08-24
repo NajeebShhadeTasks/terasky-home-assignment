@@ -1,0 +1,90 @@
+name: Promote
+
+# Explicit environment promotion: dev -> staging -> production.
+#
+# The SAME immutable image tag moves between environments - never a rebuild.
+# The workflow enforces the chain: staging may only receive what dev currently
+# runs; production may only receive what staging currently runs. Production
+# promotion additionally requires approval on the `production` GitHub
+# environment before this job may even start.
+#
+# The output is ONLY a pull request (desired state). Flux deploys after merge.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: "Environment to promote INTO"
+        required: true
+        type: choice
+        options: [staging, production]
+      image_tag:
+        description: "Immutable image tag to promote (e.g. sha-a1b2c3d)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  KUSTOMIZE_VERSION: "5.7.1"
+
+jobs:
+  promote:
+    name: Promote ${{ inputs.image_tag }} to ${{ inputs.target_environment }}
+    runs-on: ubuntu-latest
+    # `production` carries a required-reviewer rule -> human approval gate.
+    environment: ${{ inputs.target_environment }}
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.0.1
+      - name: Install kustomize (pinned)
+        run: |
+          curl -sSLo kustomize.tgz "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz"
+          tar -xzf kustomize.tgz kustomize && sudo mv kustomize /usr/local/bin/
+      - name: Validate promotion chain
+        env:
+          TAG: ${{ inputs.image_tag }}
+          TARGET: ${{ inputs.target_environment }}
+        run: |
+          set -euo pipefail
+          case "${TAG}" in
+            sha-*) ;;
+            *) echo "::error::image_tag must be an immutable sha-* tag"; exit 1 ;;
+          esac
+          if [ "${TARGET}" = "staging" ]; then SOURCE=dev; else SOURCE=staging; fi
+          CURRENT=$(grep -A1 'name: 647604014014.dkr.ecr.eu-west-1.amazonaws.com/terasky-demo/backend' \
+            "apps/backend/overlays/${SOURCE}/kustomization.yaml" | grep newTag | awk '{print $2}')
+          if [ "${CURRENT}" != "${TAG}" ]; then
+            echo "::error::${TARGET} may only receive the tag ${SOURCE} currently runs (${CURRENT}), got ${TAG}"
+            exit 1
+          fi
+          echo "Chain OK: ${SOURCE} runs ${CURRENT} -> promoting to ${TARGET}"
+      - name: Update ${{ inputs.target_environment }} overlay
+        env:
+          TAG: ${{ inputs.image_tag }}
+          TARGET: ${{ inputs.target_environment }}
+        run: |
+          cd "apps/backend/overlays/${TARGET}"
+          kustomize edit set image \
+            "647604014014.dkr.ecr.eu-west-1.amazonaws.com/terasky-demo/backend:${TAG}"
+      - name: Open promotion pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.image_tag }}
+          TARGET: ${{ inputs.target_environment }}
+        run: |
+          set -euo pipefail
+          BRANCH="promote/${TARGET}-${TAG}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "${BRANCH}"
+          git add "apps/backend/overlays/${TARGET}/kustomization.yaml"
+          git commit -m "promote(${TARGET}): ${TAG}"
+          git push origin "${BRANCH}"
+          gh pr create \
+            --title "promote(${TARGET}): ${TAG}" \
+            --body "Promotes the SAME immutable image \`${TAG}\` into **${TARGET}** (no rebuild). Flux applies this after merge. Rollback = revert this commit." \
+            --base main --head "${BRANCH}"

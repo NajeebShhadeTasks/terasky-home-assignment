@@ -1,0 +1,14 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend
+  labels:
+    app.kubernetes.io/name: terasky-backend
+spec:
+  # At least one replica stays up through voluntary disruptions (node drains,
+  # upgrades). Dev overrides this to maxUnavailable:1 because it can run a
+  # single replica.
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: terasky-backend

@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dev
+  labels:
+    app.kubernetes.io/part-of: terasky-home-assignment
+    environment: dev
+    # Pod Security Admission: the whole namespace must satisfy `restricted`.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

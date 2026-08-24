@@ -1,0 +1,23 @@
+# Required for the HPA: the autoscaler reads pod CPU from the resource
+# metrics API that metrics-server provides.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: metrics-server
+  namespace: kube-system
+spec:
+  interval: 1h
+  chart:
+    spec:
+      chart: metrics-server
+      version: 3.14.0
+      sourceRef:
+        kind: HelmRepository
+        name: metrics-server
+  values:
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        memory: 128Mi

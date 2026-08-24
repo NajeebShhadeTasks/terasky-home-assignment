@@ -1,0 +1,10 @@
+# Violates disallow-latest-tag rule 1: no tag at all (implicit :latest).
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-backend-untagged
+  namespace: dev
+spec:
+  containers:
+    - name: backend
+      image: 647604014014.dkr.ecr.eu-west-1.amazonaws.com/terasky-demo/backend

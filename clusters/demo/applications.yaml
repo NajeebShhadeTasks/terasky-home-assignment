@@ -1,0 +1,57 @@
+# One Flux Kustomization per environment. All three depend on the platform
+# layer (Kyverno policies + ESO must exist before workloads are admitted).
+# prune:true means deleting something from Git deletes it from the cluster -
+# Git is the single source of truth.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: backend-dev
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: infra-configs
+  interval: 5m
+  retryInterval: 1m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./apps/backend/overlays/dev
+  prune: true
+  wait: true
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: backend-staging
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: infra-configs
+  interval: 5m
+  retryInterval: 1m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./apps/backend/overlays/staging
+  prune: true
+  wait: true
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: backend-production
+  namespace: flux-system
+spec:
+  dependsOn:
+    - name: infra-configs
+  interval: 5m
+  retryInterval: 1m
+  timeout: 5m
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  path: ./apps/backend/overlays/production
+  prune: true
+  wait: true

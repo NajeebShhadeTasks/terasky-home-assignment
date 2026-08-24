@@ -1,0 +1,94 @@
+# Example PrometheusRule manifests for the backend service.
+#
+# NOT deployed in the demo (no Prometheus stack on the demo cluster - see
+# monitoring/README.md and docs/monitoring.md for the production design).
+# Syntax is valid kube-prometheus-stack PrometheusRule and would be picked up
+# by a Prometheus Operator via the `release` label.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: terasky-backend
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: backend.availability
+      rules:
+        # 1. High HTTP 5xx rate (uses the app's own /metrics counters)
+        - alert: BackendHighErrorRate
+          expr: |
+            sum(rate(http_requests_total{status=~"5..", namespace=~"dev|staging|production"}[5m])) by (namespace)
+              /
+            sum(rate(http_requests_total{namespace=~"dev|staging|production"}[5m])) by (namespace)
+              > 0.05
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Backend 5xx error rate above 5% in {{ $labels.namespace }}"
+            description: "More than 5% of requests failed for 5 minutes. Check recent Flux deployments and pod logs."
+
+        # 2. CrashLoopBackOff / restart spike
+        - alert: BackendPodCrashLooping
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace=~"dev|staging|production", container="backend"}[15m]) > 3
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Backend pod restarting repeatedly in {{ $labels.namespace }}"
+            description: "Container {{ $labels.pod }} restarted >3 times in 15m (probable CrashLoopBackOff)."
+
+        # 3. Deployment replicas unavailable
+        - alert: BackendReplicasUnavailable
+          expr: |
+            kube_deployment_status_replicas_unavailable{namespace=~"dev|staging|production", deployment="backend"} > 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Backend has unavailable replicas in {{ $labels.namespace }}"
+            description: "Desired replicas are not available for 10m - rollout stuck, scheduling failure or failing probes."
+
+    - name: backend.capacity
+      rules:
+        # 4. HPA pinned at maximum (cannot scale further)
+        - alert: BackendHpaAtMaxCapacity
+          expr: |
+            kube_horizontalpodautoscaler_status_current_replicas{namespace=~"dev|staging|production", horizontalpodautoscaler="backend"}
+              >=
+            kube_horizontalpodautoscaler_spec_max_replicas{namespace=~"dev|staging|production", horizontalpodautoscaler="backend"}
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Backend HPA at max replicas in {{ $labels.namespace }}"
+            description: "HPA has been pinned at maxReplicas for 15m - raise the ceiling or investigate load."
+
+        # 5. High container CPU (sustained, near limit -> throttling)
+        - alert: BackendHighCpu
+          expr: |
+            sum(rate(container_cpu_usage_seconds_total{namespace=~"dev|staging|production", container="backend"}[5m])) by (namespace, pod)
+              /
+            sum(kube_pod_container_resource_limits{resource="cpu", namespace=~"dev|staging|production", container="backend"}) by (namespace, pod)
+              > 0.9
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Backend pod {{ $labels.pod }} above 90% of CPU limit"
+            description: "Sustained CPU throttling degrades latency before the HPA target is reached."
+
+    - name: cluster.nodes
+      rules:
+        # 6. Node under pressure
+        - alert: NodePressure
+          expr: |
+            kube_node_status_condition{condition=~"MemoryPressure|DiskPressure|PIDPressure", status="true"} == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Node {{ $labels.node }} reports {{ $labels.condition }}"
+            description: "Kubelet is under resource pressure and may start evicting pods."
