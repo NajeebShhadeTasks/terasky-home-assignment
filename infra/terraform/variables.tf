@@ -58,6 +58,18 @@ variable "github_repository" {
   default     = "terasky-home-assignment"
 }
 
+variable "github_owner_id" {
+  description = "Numeric GitHub account id (immutable OIDC subject format)"
+  type        = string
+  default     = "176375566"
+}
+
+variable "github_repository_id" {
+  description = "Numeric GitHub repository id (immutable OIDC subject format)"
+  type        = string
+  default     = "1344950844"
+}
+
 variable "environments" {
   description = "Application environments (Kubernetes namespaces + Secrets Manager paths)"
   type        = list(string)

@@ -65,13 +65,14 @@ jobs:
             -t "${{ steps.ecr.outputs.registry }}/${ECR_REPOSITORY}:${{ steps.meta.outputs.tag }}" \
             app/
       - name: Scan image (Trivy - fail on HIGH/CRITICAL)
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # v0.33.1
-        with:
-          scan-type: image
-          image-ref: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.meta.outputs.tag }}
-          severity: HIGH,CRITICAL
-          exit-code: "1"
-          trivyignores: .trivyignore
+        run: |
+          curl -sSL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sudo sh -s -- -b /usr/local/bin v0.74.0
+          trivy image \
+            --severity HIGH,CRITICAL \
+            --exit-code 1 \
+            --ignorefile .trivyignore \
+            "${{ steps.ecr.outputs.registry }}/${ECR_REPOSITORY}:${{ steps.meta.outputs.tag }}"
       - name: Push image
         run: docker push "${{ steps.ecr.outputs.registry }}/${ECR_REPOSITORY}:${{ steps.meta.outputs.tag }}"
 

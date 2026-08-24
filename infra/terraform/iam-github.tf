@@ -9,6 +9,12 @@ data "aws_iam_openid_connect_provider" "github" {
 
 locals {
   github_repo_full = "${var.github_owner}/${var.github_repository}"
+
+  # GitHub is rolling out immutable OIDC subject claims that embed numeric
+  # account/repository IDs (verified for this repo via
+  # `gh api repos/.../actions/oidc/customization/sub` -> sub_claim_prefix).
+  # Trust BOTH exact formats for the same repository identity - never "sub":"*".
+  github_repo_immutable = "${var.github_owner}@${var.github_owner_id}/${var.github_repository}@${var.github_repository_id}"
 }
 
 # ---------------------------------------------------------------------------
@@ -34,7 +40,10 @@ data "aws_iam_policy_document" "gha_ecr_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${local.github_repo_full}:ref:refs/heads/main"]
+      values = [
+        "repo:${local.github_repo_full}:ref:refs/heads/main",
+        "repo:${local.github_repo_immutable}:ref:refs/heads/main",
+      ]
     }
   }
 }
@@ -105,6 +114,9 @@ data "aws_iam_policy_document" "gha_terraform_trust" {
         "repo:${local.github_repo_full}:pull_request",
         "repo:${local.github_repo_full}:ref:refs/heads/main",
         "repo:${local.github_repo_full}:environment:production",
+        "repo:${local.github_repo_immutable}:pull_request",
+        "repo:${local.github_repo_immutable}:ref:refs/heads/main",
+        "repo:${local.github_repo_immutable}:environment:production",
       ]
     }
   }
