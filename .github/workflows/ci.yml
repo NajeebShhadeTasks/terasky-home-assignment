@@ -75,7 +75,11 @@ jobs:
       - name: Build and validate every overlay + platform layer
         run: |
           set -euo pipefail
+          # -skip CustomResourceDefinition: Flux's generated gotk-components
+          # contains CRDs, which have no schemas in public catalogs. This repo
+          # authors no CRDs of its own, so nothing is lost.
           SCHEMA_OPTS=(-strict -summary
+            -skip CustomResourceDefinition
             -schema-location default
             -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json')
           for dir in \

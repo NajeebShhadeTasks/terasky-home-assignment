@@ -18,13 +18,16 @@ skip-check:
   # Demo trade-off: only api/audit/authenticator control-plane logs are kept
   # (scheduler/controllerManager add cost, little demo value).
   - CKV_AWS_37  # EKS control plane logging for ALL log types
-  # Demo trade-off: default EBS volumes of the managed node group; production
-  # would use a custom launch template with encrypted gp3.
+  # Module default launch template uses IMDS hop limit 2 (needed by some
+  # container workloads for IMDSv2); production would pin hop limit 1 via a
+  # custom launch template.
   - CKV_AWS_341
   # Secrets Manager CMK: demo uses the AWS-managed key; production would use a
-  # customer-managed KMS key with rotation.
+  # customer-managed KMS key.
   - CKV_AWS_149
-  - CKV2_AWS_57 # automatic rotation configured out-of-band (see docs/secrets.md)
+  # Rotation is manual for the demo (put-secret-value + ESO refresh);
+  # production uses Secrets Manager rotation - see docs/secrets.md.
+  - CKV2_AWS_57
   # ECR: AES256 (SSE-S3 style) encryption is acceptable for demo images;
   # production recommendation is a CMK.
   - CKV_AWS_136

@@ -1,4 +1,13 @@
-# Accepted findings with justification. Empty entries are removed as soon as
-# upstream fixes ship - nothing here silences an exploitable issue.
-#
-# (none currently)
+# Accepted findings with justification. Reviewed 2026-08-24. Nothing here
+# silences an unmitigated exploitable issue in the demo scope.
+
+# EKS public API endpoint (0.0.0.0/0): deliberate, documented DEMO trade-off so
+# the assignment can be operated without a bastion/VPN. Production design uses
+# a private endpoint (docs/aws-production-design.md, docs/tradeoffs.md).
+AVD-AWS-0041
+
+# Unrestricted node-group egress security group rule: terraform-aws-modules/eks
+# default; worker nodes need outbound access (ECR pulls, AWS APIs) through the
+# NAT gateway. Production hardening: VPC endpoints + scoped egress
+# (docs/aws-production-design.md).
+AVD-AWS-0104
