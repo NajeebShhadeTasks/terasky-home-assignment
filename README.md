@@ -200,7 +200,14 @@ aws s3api delete-objects --bucket terasky-demo-tfstate-647604014014 \
 aws s3 rb s3://terasky-demo-tfstate-647604014014
 aws dynamodb delete-table --table-name terasky-demo-tf-lock --region eu-west-1
 
-# 3. Optional: remove the Flux deploy key from the GitHub repo settings
+# 3. Delete the interview reviewer IAM user (created outside Terraform):
+for k in $(aws iam list-access-keys --user-name terasky-demo-reviewer --query 'AccessKeyMetadata[].AccessKeyId' --output text); do
+  aws iam delete-access-key --user-name terasky-demo-reviewer --access-key-id "$k"; done
+aws iam delete-user-policy --user-name terasky-demo-reviewer --policy-name terasky-demo-view-only
+aws iam delete-user --user-name terasky-demo-reviewer
+rm -f ~/terasky-reviewer-credentials.txt
+
+# 4. Optional: remove the Flux deploy key from the GitHub repo settings
 #    (Settings -> Deploy keys) and delete CloudWatch log groups /aws/eks/terasky-demo/*
 aws logs delete-log-group --log-group-name /aws/eks/terasky-demo/cluster --region eu-west-1
 ```
