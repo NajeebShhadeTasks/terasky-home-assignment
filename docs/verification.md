@@ -125,6 +125,80 @@ kubectl get pods -A -> all platform pods Running;
 
 ## Runtime verification (final)
 
-See the end-to-end results appended below after the deployment completed
-(scripts/verify.sh output summary, RBAC positive/negative checks, /nodes
-cross-check, drift demo, ESO sync, HPA metrics).
+### Full deployment
+
+First CI-built image `sha-760363c` was deployed to dev via the automated
+PR (#1), then promoted with the promote workflow: staging (PR #2), production
+(PR #3, after approving the pending deployment on the `production` GitHub
+environment). Same immutable tag in all three overlays; never rebuilt.
+
+```
+kubectl get pods -A -l app.kubernetes.io/name=terasky-backend
+  dev:        1 pod Running   (HPA 1-3, cpu 6%/70%)
+  staging:    2 pods Running  (HPA 2-4, cpu 5%/70%)
+  production: 3 pods Running  (HPA 3-6, cpu 2%/70%)  spread across both nodes
+kubectl top nodes -> metrics-server serving (HPA has live CPU metrics)
+flux get kustomizations -A -> all 6 Ready at the same revision
+```
+
+### scripts/verify.sh
+
+```
+PASS=23 FAIL=0
+```
+
+Highlights:
+
+- `/health` -> 200, `{"status":"ok","environment":"dev","secretLoaded":true}`
+- `/nodes` -> `currentNode` = `ip-10-60-8-111.eu-west-1.compute.internal`,
+  exactly matching `kubectl get pod -o wide`; both nodes listed, only the
+  hosting node marked `"current": true`
+- `/metrics` -> `http_requests_total{...}` counters live
+- RBAC positive: backend SA CAN get/list nodes
+- RBAC negative: delete pods / get secrets / list secrets / create deployments /
+  delete nodes / create clusterroles / watch nodes -> ALL denied
+- ExternalSecret `SecretSynced/Ready` and `backend-secrets` materialized in all
+  three namespaces
+
+### Admission control (negative tests, live cluster)
+
+1. `kubectl run --image=nginx:latest` (no securityContext) -> **rejected by
+   Pod Security Admission** (`restricted` namespace labels).
+2. A PSA-compliant pod using `docker.io/library/nginx:latest` -> **rejected by
+   Kyverno** with exactly the expected policy messages:
+   `disallow-latest-tag` ("mutable `latest` tag is not allowed") and
+   `restrict-image-registries` ("Images must come from
+   647604014014.dkr.ecr.eu-west-1.amazonaws.com").
+
+### Flux drift correction
+
+```
+kubectl set env deployment/backend -n dev DRIFT_DEMO=manual-change
+  env: NODE_NAME POD_NAME POD_NAMESPACE API_KEY DRIFT_DEMO
+flux reconcile kustomization backend-dev --with-source
+  env: NODE_NAME POD_NAME POD_NAMESPACE API_KEY      <- drift reverted
+```
+
+(Replica-count drift is intentionally not the demo: the HPA owns
+`spec.replicas`, which is why the field is absent from Git. See docs/demo.md.)
+
+### Secret rotation
+
+```
+aws secretsmanager put-secret-value --secret-id terasky/dev/backend ... (value not shown)
+Secret resourceVersion: before=4594 after=25853 within the 1m refreshInterval
+ExternalSecret status: "secret synced"
+```
+
+### NetworkPolicy enforcement
+
+VPC CNI node agent runs with `--enable-network-policy=true` (verified on the
+aws-node DaemonSet), so the deployed NetworkPolicy objects are enforced, not
+silently ignored.
+
+### Rollback drill
+
+A second image (`app` version 1.0.1) was built by CI, deployed to dev through
+the automated PR, verified, and then rolled back with `git revert` of the
+deploy commit; Flux reconciled dev back to the previous image. Evidence in the
+git history (`git log -- apps/backend/overlays/dev`).
