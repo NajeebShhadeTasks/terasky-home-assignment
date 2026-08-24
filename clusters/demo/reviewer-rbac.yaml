@@ -1,0 +1,88 @@
+# Read-only access for the interview reviewer (EKS access entry maps the IAM
+# user terasky-demo-reviewer into group `terasky-reviewers`).
+# Grants: view pods/services/deployments/HPA + port-forward in the three app
+# namespaces, and read nodes. Nothing else - no secrets, no writes.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: terasky-reviewer-nodes
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "namespaces"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: terasky-reviewer-nodes
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: terasky-reviewer-nodes
+subjects:
+  - kind: Group
+    name: terasky-reviewers
+    apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: terasky-reviewer-app-view
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "pods/log"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/portforward"]
+    verbs: ["create"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list"]
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: terasky-reviewer
+  namespace: dev
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: terasky-reviewer-app-view
+subjects:
+  - kind: Group
+    name: terasky-reviewers
+    apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: terasky-reviewer
+  namespace: staging
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: terasky-reviewer-app-view
+subjects:
+  - kind: Group
+    name: terasky-reviewers
+    apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: terasky-reviewer
+  namespace: production
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: terasky-reviewer-app-view
+subjects:
+  - kind: Group
+    name: terasky-reviewers
+    apiGroup: rbac.authorization.k8s.io
